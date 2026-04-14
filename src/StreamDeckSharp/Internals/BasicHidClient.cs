@@ -145,6 +145,11 @@ namespace StreamDeckSharp.Internals
 
         private void ProcessKeys(byte[] newStates)
         {
+            if (newStates.Length < HidComDriver.KeyReportOffset + keyStates.Length)
+            {
+                return;
+            }
+
             for (var i = 0; i < keyStates.Length; i++)
             {
                 var newStatePos = i + HidComDriver.KeyReportOffset;

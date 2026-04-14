@@ -1,0 +1,6 @@
+# Claude Code
+.claude/
+CLAUDE.md
+
+# Device tester (local testing tool)
+src/DeviceTester/

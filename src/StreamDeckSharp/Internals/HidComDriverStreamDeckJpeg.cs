@@ -8,12 +8,60 @@ using System.IO;
 namespace StreamDeckSharp.Internals
 {
     /// <summary>
+    /// Specifies how key images are transformed before sending to the device.
+    /// </summary>
+    public enum JpegImageTransform
+    {
+        /// <summary>
+        /// No transformation applied. Used by Stream Deck Plus.
+        /// </summary>
+        None,
+
+        /// <summary>
+        /// Rotate 90 degrees clockwise.
+        /// </summary>
+        Rotate90,
+
+        /// <summary>
+        /// Rotate 180 degrees (flip both axes). Used by MK.2, Rev2, XL, Neo.
+        /// </summary>
+        Rotate180,
+
+        /// <summary>
+        /// Rotate 270 degrees clockwise (90 degrees counter-clockwise).
+        /// </summary>
+        Rotate270,
+
+        /// <summary>
+        /// Mirror horizontally (flip left-right).
+        /// </summary>
+        FlipH,
+
+        /// <summary>
+        /// Mirror horizontally then rotate 90 degrees clockwise.
+        /// </summary>
+        FlipHRotate90,
+
+        /// <summary>
+        /// Mirror vertically (flip top-bottom).
+        /// </summary>
+        FlipV,
+
+        /// <summary>
+        /// Transpose (mirror along top-left to bottom-right diagonal).
+        /// </summary>
+        Transpose,
+    }
+
+    /// <summary>
     /// HID Stream Deck communication driver for JPEG based devices.
     /// </summary>
     public sealed class HidComDriverStreamDeckJpeg
         : IStreamDeckHidComDriver
     {
         private readonly int imgSize;
+        private readonly int expectedInputReportLength;
+        private JpegImageTransform imageTransform;
         private readonly JpegEncoder jpgEncoder;
 
         private byte[] cachedNullImage = null;
@@ -22,8 +70,14 @@ namespace StreamDeckSharp.Internals
         /// Initializes a new instance of the <see cref="HidComDriverStreamDeckJpeg"/> class.
         /// </summary>
         /// <param name="imgSize">The size of the button images in pixels.</param>
-        /// /// <exception cref="ArgumentOutOfRangeException">Thrown if the <paramref name="imgSize"/> is smaller than one.</exception>
-        public HidComDriverStreamDeckJpeg(int imgSize)
+        /// <param name="expectedInputReportLength">The expected input report length for the device.</param>
+        /// <param name="imageTransform">The image transformation to apply before sending to the device.</param>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown if the <paramref name="imgSize"/> is smaller than one.</exception>
+        public HidComDriverStreamDeckJpeg(
+            int imgSize,
+            int expectedInputReportLength = 512,
+            JpegImageTransform imageTransform = JpegImageTransform.Rotate180
+        )
         {
             if (imgSize < 1)
             {
@@ -36,6 +90,8 @@ namespace StreamDeckSharp.Internals
             };
 
             this.imgSize = imgSize;
+            this.expectedInputReportLength = expectedInputReportLength;
+            this.imageTransform = imageTransform;
         }
 
         /// <inheritdoc/>
@@ -51,7 +107,7 @@ namespace StreamDeckSharp.Internals
         public int ExpectedOutputReportLength => 1024;
 
         /// <inheritdoc/>
-        public int ExpectedInputReportLength => 512;
+        public int ExpectedInputReportLength => expectedInputReportLength;
 
         /// <inheritdoc/>
         public int KeyReportOffset => 4;
@@ -70,6 +126,12 @@ namespace StreamDeckSharp.Internals
 
         /// <inheritdoc/>
         public double BytesPerSecondLimit { get; set; } = double.PositiveInfinity;
+
+        internal void SetImageTransform(JpegImageTransform transform)
+        {
+            imageTransform = transform;
+            cachedNullImage = null;
+        }
 
         /// <inheritdoc/>
         public int ExtKeyIdToHardwareKeyId(int extKeyId)
@@ -155,26 +217,62 @@ namespace StreamDeckSharp.Internals
 
         private byte[] EncodeImageToJpg(ReadOnlySpan<byte> bgr24)
         {
-            // Flip XY ... for some reason the JPEG devices have flipped x and y coordinates.
-            var flippedData = new byte[imgSize * imgSize * 3];
+            var transformedData = new byte[imgSize * imgSize * 3];
 
             for (var y = 0; y < imgSize; y++)
             {
                 for (var x = 0; x < imgSize; x++)
                 {
-                    var x1 = imgSize - 1 - x;
-                    var y1 = imgSize - 1 - y;
+                    int srcX, srcY;
+
+                    var m = imgSize - 1;
+
+                    switch (imageTransform)
+                    {
+                        case JpegImageTransform.Rotate90:
+                            srcX = y;
+                            srcY = m - x;
+                            break;
+                        case JpegImageTransform.Rotate180:
+                            srcX = m - x;
+                            srcY = m - y;
+                            break;
+                        case JpegImageTransform.Rotate270:
+                            srcX = m - y;
+                            srcY = x;
+                            break;
+                        case JpegImageTransform.FlipH:
+                            srcX = m - x;
+                            srcY = y;
+                            break;
+                        case JpegImageTransform.FlipHRotate90:
+                            srcX = m - y;
+                            srcY = m - x;
+                            break;
+                        case JpegImageTransform.FlipV:
+                            srcX = x;
+                            srcY = m - y;
+                            break;
+                        case JpegImageTransform.Transpose:
+                            srcX = y;
+                            srcY = x;
+                            break;
+                        default: // None
+                            srcX = x;
+                            srcY = y;
+                            break;
+                    }
 
                     var pTarget = (y * imgSize + x) * 3;
-                    var pSource = (y1 * imgSize + x1) * 3;
+                    var pSource = (srcY * imgSize + srcX) * 3;
 
-                    flippedData[pTarget + 0] = bgr24[pSource + 0];
-                    flippedData[pTarget + 1] = bgr24[pSource + 1];
-                    flippedData[pTarget + 2] = bgr24[pSource + 2];
+                    transformedData[pTarget + 0] = bgr24[pSource + 0];
+                    transformedData[pTarget + 1] = bgr24[pSource + 1];
+                    transformedData[pTarget + 2] = bgr24[pSource + 2];
                 }
             }
 
-            using var image = Image.LoadPixelData<Bgr24>(flippedData, imgSize, imgSize);
+            using var image = Image.LoadPixelData<Bgr24>(transformedData, imgSize, imgSize);
 
             using var memStream = new MemoryStream();
             image.SaveAsJpeg(memStream, jpgEncoder);
