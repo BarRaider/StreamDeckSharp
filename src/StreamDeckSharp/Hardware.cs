@@ -92,6 +92,42 @@ namespace StreamDeckSharp
                     ElgatoUsbId(0x0063),
                     ElgatoUsbId(0x0090)
                 );
+
+            // .-------------------.
+            // | Stream Deck Plus  |
+            // '-------------------'
+
+            StreamDeckPlus =
+                RegisterNewHardwareInternal(
+                    "Stream Deck Plus",
+                    new GridKeyLayout(4, 2, 120, 30),
+                    new HidComDriverStreamDeckJpeg(120, imageTransform: JpegImageTransform.None),
+                    ElgatoUsbId(0x0084)
+                );
+
+            // .-----------------.
+            // | Stream Deck Neo |
+            // '-----------------'
+
+            StreamDeckNeo =
+                RegisterNewHardwareInternal(
+                    "Stream Deck Neo",
+                    new GridKeyLayout(4, 2, 96, 20),
+                    new HidComDriverStreamDeckJpeg(96),
+                    ElgatoUsbId(0x009a)
+                );
+
+            // .----------------------.
+            // | Stream Deck Plus XL  |
+            // '----------------------'
+
+            StreamDeckPlusXL =
+                RegisterNewHardwareInternal(
+                    "Stream Deck Plus XL",
+                    new GridKeyLayout(9, 4, 112, 30),
+                    new HidComDriverStreamDeckJpeg(112, imageTransform: JpegImageTransform.Rotate270),
+                    ElgatoUsbId(0x00c6)
+                );
         }
 
         /// <summary>
@@ -118,6 +154,21 @@ namespace StreamDeckSharp
         /// Details about the Stream Deck Mini
         /// </summary>
         public static IUsbHidHardware StreamDeckMini { get; }
+
+        /// <summary>
+        /// Details about the Stream Deck Plus
+        /// </summary>
+        public static IUsbHidHardware StreamDeckPlus { get; }
+
+        /// <summary>
+        /// Details about the Stream Deck Neo
+        /// </summary>
+        public static IUsbHidHardware StreamDeckNeo { get; }
+
+        /// <summary>
+        /// Details about the Stream Deck Plus XL
+        /// </summary>
+        public static IUsbHidHardware StreamDeckPlusXL { get; }
 
         /// <summary>
         /// This method registers a new (currently unknown to this library) hardware driver.
